@@ -318,6 +318,47 @@
 
         .hidden { display: none; }
 
+        /* Brand cards */
+        .brands-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .brand-card {
+            background: #f6f6f6;
+            padding: 0.75rem 1rem;
+            border-left: 3px solid #052962;
+        }
+        .brand-name {
+            font-family: "Guardian Egyptian Web", Georgia, serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #121212;
+            margin-bottom: 0.25rem;
+            line-height: 1.2;
+        }
+        .brand-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .brand-category {
+            font-size: 0.75rem;
+            color: #707070;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .brand-mentions {
+            font-size: 0.8rem;
+            color: #333;
+            font-weight: 700;
+        }
+        .brand-card.sentiment-positive { border-left-color: #22874D; }
+        .brand-card.sentiment-negative { border-left-color: #c70000; }
+        .brand-card.sentiment-mixed { border-left-color: #e05e00; }
+
         /* Tabs */
         .tabs {
             display: flex;
@@ -1010,15 +1051,20 @@
             try {
                 var brands = data.brands || [];
                 if (brands.length) {
-                    html += '<h4 style="font-size:0.95rem;color:#052962;margin-bottom:0.4rem;">Brands &amp; Products Mentioned</h4>';
+                    html += '<h4 style="font-size:0.95rem;color:#052962;margin-bottom:0.6rem;">Brands &amp; Products Mentioned</h4>';
+                    html += '<div class="brands-grid">';
                     html += brands.map(function(b) {
-                        return '<div class="topic-row">' +
-                            '<span class="topic-name">' + escapeHtml(b.name || "") + '</span>' +
-                            '<span class="badge badge-' + (b.sentiment || "neutral") + '">' + (b.sentiment || "neutral") + '</span>' +
-                            '<span class="topic-pct">' + (b.mentions || 0) + ' mention' + (b.mentions !== 1 ? 's' : '') + '</span>' +
-                            '<span style="font-size:0.8rem;color:#707070;margin-left:0.4rem;">' + escapeHtml(b.category || "") + '</span>' +
+                        var sentiment = b.sentiment || "neutral";
+                        return '<div class="brand-card sentiment-' + sentiment + '">' +
+                            '<div class="brand-name">' + escapeHtml(b.name || "") + '</div>' +
+                            '<div class="brand-meta">' +
+                                '<span class="badge badge-' + sentiment + '">' + sentiment + '</span>' +
+                                '<span class="brand-mentions">' + (b.mentions || 0) + ' mention' + (b.mentions !== 1 ? 's' : '') + '</span>' +
+                            '</div>' +
+                            (b.category ? '<div class="brand-category">' + escapeHtml(b.category) + '</div>' : '') +
                         '</div>';
                     }).join("");
+                    html += '</div>';
                 }
 
                 var recs = data.recommendations || [];
