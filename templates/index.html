@@ -823,9 +823,9 @@
             show(resultsSection);
             switch (data.section) {
                 case "meta":         renderMeta(data.data);     break;
-                case "sentiment":    renderSentiment(data.data); break;
+                case "sentiment":    break;
                 case "discussionQuestions": renderDiscussionQuestions(data.data); break;
-                case "commercialOpportunities": renderCommercial(data.data); break;
+                case "commercialOpportunities": break;
             }
         }
 
@@ -836,14 +836,6 @@
             submitBtn.disabled = false;
             submitBtn.textContent = "Analyze";
             setTimeout(function() { hide(progressSection); }, 1500);
-
-            // Ensure commercial card is visible even if its SSE event was missed
-            var commercialCard = document.getElementById("commercial-card");
-            if (commercialCard.classList.contains("hidden")) {
-                show(commercialCard);
-                document.getElementById("commercial-content").innerHTML =
-                    '<p style="color:#707070;">No commercial signals found in comments.</p>';
-            }
         }
 
         function handleKeywordProgress(data) {
