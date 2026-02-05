@@ -4,6 +4,11 @@ Guardian Comments Analyzer — Flask Web App
 Provides a web interface for scraping and analyzing Guardian article comments.
 """
 
+# Gevent monkey patching must happen before any other imports
+# This is required when running under gunicorn with gevent workers
+from gevent import monkey
+monkey.patch_all()
+
 import json
 import os
 
