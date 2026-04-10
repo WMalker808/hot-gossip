@@ -12,6 +12,7 @@ import sys
 import os
 import time
 from datetime import datetime
+from html.parser import HTMLParser
 from urllib.parse import urlparse
 
 
@@ -296,6 +297,127 @@ def scrape_guardian_comments(article_url: str, output_file: str = None) -> dict:
     print(f"\nSaved {result['totalFetched']} comments to: {output_file}")
 
     return result
+
+
+class _FigureParser(HTMLParser):
+    """SAX-style parser that extracts <figure> blocks with their img and figcaption."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.figures = []
+        self._in_figure = False
+        self._in_figcaption = False
+        self._depth = 0          # nesting depth while inside a figure
+        self._current = None
+        self._caption_parts = []
+
+    def handle_starttag(self, tag, attrs):
+        attr_dict = dict(attrs)
+        if tag == "figure":
+            self._in_figure = True
+            self._depth = 0
+            self._current = {"src": None, "alt": None, "caption": ""}
+            self._caption_parts = []
+        elif self._in_figure:
+            self._depth += 1
+            if tag == "img" and self._current is not None and self._current["src"] is None:
+                self._current["src"] = attr_dict.get("src") or attr_dict.get("data-src")
+                # alt attribute may be explicitly empty string — preserve that
+                if "alt" in attr_dict:
+                    self._current["alt"] = attr_dict["alt"]
+            elif tag == "figcaption":
+                self._in_figcaption = True
+
+    def handle_endtag(self, tag):
+        if tag == "figure" and self._in_figure:
+            if self._current and self._current["src"]:
+                self._current["caption"] = " ".join(self._caption_parts).strip()
+                self.figures.append(self._current)
+            self._in_figure = False
+            self._in_figcaption = False
+            self._current = None
+            self._caption_parts = []
+            self._depth = 0
+        elif self._in_figure:
+            self._depth -= 1
+            if tag == "figcaption":
+                self._in_figcaption = False
+
+    def handle_data(self, data):
+        if self._in_figcaption and data.strip():
+            self._caption_parts.append(data.strip())
+
+
+def scrape_article_images(article_url: str) -> dict:
+    """
+    Scrape all images with alt text and captions from a Guardian article page.
+
+    Args:
+        article_url: Full URL to a Guardian article
+
+    Returns:
+        Dict with keys: headline, section, article_url, images (list of dicts).
+        Each image dict: src, alt, caption, position (0-indexed), is_lead.
+    """
+    response = requests.get(article_url, timeout=30)
+    response.raise_for_status()
+    html = response.text
+
+    # Extract headline from JSON-LD (most reliable)
+    headline = "Unknown Article"
+    ld_match = re.search(r'"headline"\s*:\s*"([^"]+)"', html)
+    if ld_match:
+        headline = ld_match.group(1)
+    else:
+        h1_match = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
+        if h1_match:
+            headline = h1_match.group(1).strip()
+
+    # Extract section from JSON-LD or meta tag
+    section = ""
+    section_match = re.search(r'"articleSection"\s*:\s*"([^"]+)"', html)
+    if section_match:
+        section = section_match.group(1)
+    else:
+        meta_match = re.search(r'<meta[^>]+property="article:section"[^>]+content="([^"]+)"', html)
+        if meta_match:
+            section = meta_match.group(1)
+
+    # Parse figures using stdlib HTMLParser
+    parser = _FigureParser()
+    parser.feed(html)
+    raw_figures = parser.figures
+
+    # Deduplicate by src, skip SVGs and data URIs
+    seen_srcs = set()
+    images = []
+    for fig in raw_figures:
+        src = fig.get("src", "")
+        if not src or src.startswith("data:") or src.lower().endswith(".svg"):
+            continue
+        if src in seen_srcs:
+            continue
+        seen_srcs.add(src)
+
+        caption = fig.get("caption", "")
+        # Truncate very long captions
+        if len(caption) > 500:
+            caption = caption[:500] + "..."
+
+        images.append({
+            "position": len(images),
+            "src": src,
+            "alt": fig.get("alt"),          # None means attr absent; "" means explicitly empty
+            "caption": caption,
+            "is_lead": len(images) == 0,
+        })
+
+    return {
+        "headline": headline,
+        "section": section,
+        "article_url": article_url,
+        "images": images,
+    }
 
 
 def main():

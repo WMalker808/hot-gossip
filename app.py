@@ -20,6 +20,7 @@ from guardian_scraper import (
     search_articles_by_keyword,
     fetch_comments_for_articles,
     extract_articles_from_section,
+    scrape_article_images,
 )
 from comment_analyzer import (
     prepare_comments_for_analysis,
@@ -28,6 +29,10 @@ from comment_analyzer import (
     extract_commercial_opportunities,
     extract_commercial_opportunities_aggregated,
     merge_commercial_results,
+)
+from alt_text_analyzer import (
+    fetch_and_encode_image,
+    assess_alt_text,
 )
 
 app = Flask(__name__)
@@ -463,6 +468,131 @@ def analyze_section():
 
     return Response(
         generate_section_analysis(url, limit),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def generate_alt_text_analysis(article_url: str):
+    """Generator that yields SSE events for alt text quality assessment."""
+    try:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            yield format_sse({
+                "type": "error",
+                "message": "ANTHROPIC_API_KEY environment variable not set.",
+            })
+            return
+
+        # Phase 1: Scrape images from article
+        yield format_sse({
+            "type": "progress",
+            "step": "scraping",
+            "message": "Fetching article and extracting images...",
+        })
+
+        article_data = scrape_article_images(article_url)
+        images = article_data["images"]
+        total = len(images)
+
+        if total == 0:
+            yield format_sse({
+                "type": "error",
+                "message": "No images found in this article.",
+            })
+            return
+
+        yield format_sse({
+            "type": "result",
+            "section": "altTextMeta",
+            "data": {
+                "headline": article_data["headline"],
+                "section": article_data["section"],
+                "articleUrl": article_url,
+                "totalImages": total,
+            },
+        })
+
+        # Phase 2: Assess each image individually, streaming results as they complete
+        results = []
+        for i, image in enumerate(images):
+            yield format_sse({
+                "type": "progress",
+                "step": "analyzing",
+                "message": f"Assessing image {i + 1} of {total}...",
+            })
+
+            encoded = fetch_and_encode_image(image["src"])
+
+            if encoded is None:
+                alt = image.get("alt")
+                result = {
+                    "position": image["position"] + 1,
+                    "src": image["src"],
+                    "original_alt": alt,
+                    "alt_missing": alt is None,
+                    "caption": image.get("caption") or "",
+                    "char_count": len(alt or ""),
+                    "fetch_failed": True,
+                    "score": "fail",
+                    "issues": ["Image could not be fetched for analysis"],
+                    "suggested_alt": "",
+                    "violated_criteria": [],
+                    "criteria_results": {},
+                    "is_decorative": False,
+                }
+            else:
+                base64_data, media_type = encoded
+                result = assess_alt_text(
+                    image_data=image,
+                    base64_image=base64_data,
+                    media_type=media_type,
+                    article_headline=article_data["headline"],
+                    article_section=article_data["section"],
+                )
+
+            results.append(result)
+            yield format_sse({"type": "result", "section": "altTextResult", "data": result})
+
+        # Phase 3: Summary
+        pass_count = sum(1 for r in results if r.get("score") == "pass")
+        fail_count = sum(1 for r in results if r.get("score") == "fail")
+        needs_count = total - pass_count - fail_count
+
+        yield format_sse({
+            "type": "result",
+            "section": "altTextSummary",
+            "data": {
+                "total": total,
+                "pass": pass_count,
+                "needsImprovement": needs_count,
+                "fail": fail_count,
+                "passRate": round(pass_count / total * 100) if total else 0,
+            },
+        })
+
+        yield format_sse({"type": "complete", "message": "Assessment complete"})
+
+    except ValueError as e:
+        yield format_sse({"type": "error", "message": str(e)})
+    except Exception as e:
+        yield format_sse({"type": "error", "message": f"Error: {e}"})
+
+
+@app.route("/analyze-alt-text")
+def analyze_alt_text():
+    url = request.args.get("url", "").strip()
+    if not url:
+        return Response(
+            format_sse({"type": "error", "message": "No URL provided"}),
+            content_type="text/event-stream",
+        )
+    if "theguardian.com" not in url:
+        return Response(
+            format_sse({"type": "error", "message": "Please provide a Guardian article URL"}),
+            content_type="text/event-stream",
+        )
+    return Response(
+        generate_alt_text_analysis(url),
         content_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
