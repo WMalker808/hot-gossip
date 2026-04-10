@@ -494,6 +494,60 @@
             margin-left: 0.5rem;
         }
 
+        /* Alt text audit */
+        .alttext-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid #dcdcdc;
+        }
+        .alttext-item:last-child { border-bottom: none; }
+        .alttext-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .alttext-thumb {
+            width: 80px;
+            height: 56px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: #dcdcdc;
+        }
+        .alttext-score-pass  { border-color: #22874D; color: #22874D; }
+        .alttext-score-needs { border-color: #e05e00; color: #e05e00; }
+        .alttext-score-fail  { border-color: #c70000; color: #c70000; }
+        .alttext-original {
+            font-size: 0.875rem;
+            background: #f6f6f6;
+            padding: 0.35rem 0.7rem;
+            border-left: 3px solid #dcdcdc;
+            margin: 0.35rem 0;
+            font-style: italic;
+            color: #555;
+            word-break: break-word;
+        }
+        .alttext-suggestion {
+            font-size: 0.875rem;
+            background: #f0fff4;
+            padding: 0.35rem 0.7rem;
+            border-left: 3px solid #22874D;
+            margin: 0.35rem 0;
+            color: #1a5c35;
+            word-break: break-word;
+        }
+        .alttext-issues { margin: 0.35rem 0; padding-left: 1.2rem; }
+        .alttext-issues li { font-size: 0.825rem; color: #c70000; margin: 0.15rem 0; }
+        .audit-summary-bar {
+            display: flex;
+            height: 24px;
+            overflow: hidden;
+            margin: 0.5rem 0 0.75rem;
+        }
+        .audit-bar-pass  { background: #22874D; }
+        .audit-bar-needs { background: #e05e00; }
+        .audit-bar-fail  { background: #c70000; }
+
         @media (max-width: 600px) {
             .tabs { flex-direction: column; border-bottom: none; }
             .tab { border-right: none; border-bottom: 1px solid #dcdcdc; }
@@ -519,6 +573,7 @@
             <button type="button" class="tab active" data-tab="article">Single Article</button>
             <button type="button" class="tab" data-tab="section">Section / Front</button>
             <button type="button" class="tab" data-tab="keyword">Keyword Search</button>
+            <button type="button" class="tab" data-tab="alttext">Alt Text Audit</button>
         </div>
 
         <div id="panel-article" class="tab-panel">
@@ -566,6 +621,17 @@
             </form>
         </div>
 
+        <div id="panel-alttext" class="tab-panel hidden">
+            <p class="panel-description">
+                <strong>Audit image alt text.</strong>
+                Paste a Guardian article URL to assess all its images against WCAG 2.1 accessibility standards using Claude's vision AI.
+            </p>
+            <form id="alttext-form" class="search-form">
+                <input type="url" id="alttext-input" class="form-input" placeholder="https://www.theguardian.com/..." required>
+                <button type="submit" id="alttext-submit-btn" class="submit-btn">Audit</button>
+            </form>
+        </div>
+
         <div id="progress-section" class="hidden">
             <div id="progress-bar-container">
                 <div id="progress-bar"></div>
@@ -610,6 +676,21 @@
                 <h2>Commercial Opportunities</h2>
                 <div id="commercial-content"></div>
             </div>
+
+            <div id="alttext-meta-card" class="result-card hidden">
+                <h2>Alt Text Audit</h2>
+                <div id="alttext-meta-content"></div>
+            </div>
+
+            <div id="alttext-results-card" class="result-card hidden">
+                <h2>Image Assessments</h2>
+                <div id="alttext-results-content"></div>
+            </div>
+
+            <div id="alttext-summary-card" class="result-card hidden">
+                <h2>Summary</h2>
+                <div id="alttext-summary-content"></div>
+            </div>
         </div>
     </main>
 
@@ -631,11 +712,15 @@
         const errorSection = document.getElementById("error-section");
         const errorMessage = document.getElementById("error-message");
         const resultsSection = document.getElementById("results-section");
+        const alttextForm = document.getElementById("alttext-form");
+        const alttextInput = document.getElementById("alttext-input");
+        const alttextSubmitBtn = document.getElementById("alttext-submit-btn");
         const tabs = document.querySelectorAll(".tab");
         const panels = {
             article: document.getElementById("panel-article"),
             section: document.getElementById("panel-section"),
-            keyword: document.getElementById("panel-keyword")
+            keyword: document.getElementById("panel-keyword"),
+            alttext: document.getElementById("panel-alttext")
         };
 
         let eventSource = null;
@@ -686,7 +771,12 @@
             document.getElementById("sentiment-topics").innerHTML = "";
             document.getElementById("questions-content").innerHTML = "";
             document.getElementById("commercial-content").innerHTML = "";
-            ["meta-card", "keyword-meta-card", "articles-card", "sentiment-card", "questions-card", "commercial-card"].forEach(function(id) {
+            document.getElementById("alttext-meta-content").innerHTML = "";
+            document.getElementById("alttext-results-content").innerHTML = "";
+            document.getElementById("alttext-summary-content").innerHTML = "";
+            ["meta-card", "keyword-meta-card", "articles-card", "sentiment-card",
+             "questions-card", "commercial-card",
+             "alttext-meta-card", "alttext-results-card", "alttext-summary-card"].forEach(function(id) {
                 hide(document.getElementById(id));
             });
             hide(resultsSection);
@@ -962,6 +1052,8 @@
             sectionSubmitBtn.textContent = "Analyze";
             keywordSubmitBtn.disabled = false;
             keywordSubmitBtn.textContent = "Search";
+            alttextSubmitBtn.disabled = false;
+            alttextSubmitBtn.textContent = "Audit";
         }
 
         /* ---- Render functions ---- */
@@ -1091,6 +1183,157 @@
 
             if (!html) html = '<p style="color:#707070;">No commercial signals found in comments.</p>';
             document.getElementById("commercial-content").innerHTML = html;
+        }
+        /* ---- Alt text audit ---- */
+
+        alttextForm.addEventListener("submit", function(e) {
+            e.preventDefault();
+            var url = alttextInput.value.trim();
+            if (!url) return;
+
+            resetResults();
+            show(progressSection);
+            alttextSubmitBtn.disabled = true;
+            alttextSubmitBtn.textContent = "Auditing...";
+
+            if (eventSource) eventSource.close();
+
+            eventSource = new EventSource("/analyze-alt-text?url=" + encodeURIComponent(url));
+
+            eventSource.onmessage = function(event) {
+                try {
+                    var data = JSON.parse(event.data);
+                    switch (data.type) {
+                        case "progress": handleAltTextProgress(data); break;
+                        case "result":   handleAltTextResult(data);   break;
+                        case "complete": handleAltTextComplete();      break;
+                        case "error":    handleError(data.message);    break;
+                    }
+                } catch (e) {
+                    console.error("SSE parse/render error:", e);
+                }
+            };
+
+            eventSource.onerror = function() {
+                eventSource.close();
+                if (alttextSubmitBtn.disabled) {
+                    handleError("Connection lost. Please try again.");
+                }
+            };
+        });
+
+        function handleAltTextProgress(data) {
+            progressMessage.textContent = data.message;
+            var msg = data.message.toLowerCase();
+            if (msg.includes("fetching")) {
+                currentProgress = 10;
+            } else if (msg.includes("assessing")) {
+                var nums = msg.match(/(\d+)\s+of\s+(\d+)/);
+                if (nums) {
+                    currentProgress = 15 + Math.floor((parseInt(nums[1]) / parseInt(nums[2])) * 80);
+                }
+            }
+            progressBar.style.width = Math.min(currentProgress, 95) + "%";
+        }
+
+        function handleAltTextResult(data) {
+            show(resultsSection);
+            switch (data.section) {
+                case "altTextMeta":    renderAltTextMeta(data.data);    break;
+                case "altTextResult":  appendAltTextResult(data.data);  break;
+                case "altTextSummary": renderAltTextSummary(data.data); break;
+            }
+        }
+
+        function handleAltTextComplete() {
+            if (eventSource) eventSource.close();
+            progressBar.style.width = "100%";
+            progressMessage.textContent = "Audit complete!";
+            alttextSubmitBtn.disabled = false;
+            alttextSubmitBtn.textContent = "Audit";
+            setTimeout(function() { hide(progressSection); }, 1500);
+        }
+
+        function renderAltTextMeta(data) {
+            show(document.getElementById("alttext-meta-card"));
+            document.getElementById("alttext-meta-content").innerHTML =
+                '<h3 class="meta-title"><a href="' + escapeHtml(data.articleUrl) + '" target="_blank">' + escapeHtml(data.headline) + '</a></h3>' +
+                '<div class="meta-stats">' +
+                    (data.section ? '<span class="stat">' + escapeHtml(data.section) + '</span>' : '') +
+                    '<span class="stat">' + data.totalImages + ' image' + (data.totalImages !== 1 ? 's' : '') + ' found</span>' +
+                '</div>';
+            show(document.getElementById("alttext-results-card"));
+        }
+
+        function appendAltTextResult(r) {
+            var scoreClass = r.score === "pass" ? "alttext-score-pass"
+                           : r.score === "fail" ? "alttext-score-fail"
+                           : "alttext-score-needs";
+            var scoreLabel = r.score === "pass" ? "Pass"
+                           : r.score === "fail" ? "Fail"
+                           : "Needs Improvement";
+
+            var altDisplay;
+            if (r.alt_missing) {
+                altDisplay = '<em style="color:#c70000;">Missing (attribute absent)</em>';
+            } else if (r.original_alt === "" || r.original_alt === null) {
+                altDisplay = '<em style="color:#707070;">Empty string</em>';
+            } else {
+                altDisplay = escapeHtml(r.original_alt) +
+                    ' <span style="color:#707070;font-size:0.75rem;">(' + r.char_count + ' chars)</span>';
+            }
+
+            var issuesHtml = "";
+            if (r.issues && r.issues.length && r.score !== "pass") {
+                issuesHtml = '<ul class="alttext-issues">' +
+                    r.issues.map(function(i) { return '<li>' + escapeHtml(i) + '</li>'; }).join("") +
+                    '</ul>';
+            }
+
+            var suggestionHtml = "";
+            if (r.suggested_alt && r.score !== "pass") {
+                suggestionHtml = '<div class="alttext-suggestion"><strong>Suggested:</strong> ' +
+                    escapeHtml(r.suggested_alt) + '</div>';
+            }
+
+            var decorativeNote = r.is_decorative
+                ? '<span style="font-size:0.8rem;color:#707070;"> · Decorative image</span>'
+                : "";
+
+            var html = '<div class="alttext-item">' +
+                '<div class="alttext-header">' +
+                    (r.fetch_failed ? '' :
+                        '<img class="alttext-thumb" src="' + escapeHtml(r.src) + '" alt="" loading="lazy">') +
+                    '<span class="badge ' + scoreClass + '">' + scoreLabel + '</span>' +
+                    '<span style="font-size:0.8rem;color:#707070;">Image ' + r.position + '</span>' +
+                    decorativeNote +
+                '</div>' +
+                '<div class="alttext-original"><strong>Alt text:</strong> ' + altDisplay + '</div>' +
+                (r.caption ? '<div style="font-size:0.8rem;color:#707070;margin:0.2rem 0 0.35rem;"><strong>Caption:</strong> ' + escapeHtml(r.caption.substring(0, 150)) + (r.caption.length > 150 ? '...' : '') + '</div>' : '') +
+                issuesHtml + suggestionHtml +
+            '</div>';
+
+            document.getElementById("alttext-results-content").insertAdjacentHTML("beforeend", html);
+        }
+
+        function renderAltTextSummary(data) {
+            show(document.getElementById("alttext-summary-card"));
+            var passW  = data.total ? Math.round(data.pass / data.total * 100) : 0;
+            var needsW = data.total ? Math.round(data.needsImprovement / data.total * 100) : 0;
+            var failW  = data.total ? Math.round(data.fail / data.total * 100) : 0;
+
+            document.getElementById("alttext-summary-content").innerHTML =
+                '<div class="audit-summary-bar">' +
+                    '<div class="audit-bar-pass"  style="width:' + passW  + '%" title="Pass"></div>' +
+                    '<div class="audit-bar-needs" style="width:' + needsW + '%" title="Needs Improvement"></div>' +
+                    '<div class="audit-bar-fail"  style="width:' + failW  + '%" title="Fail"></div>' +
+                '</div>' +
+                '<div class="meta-stats">' +
+                    '<span class="stat" style="border-left:3px solid #22874D">' + data.pass + ' Pass</span>' +
+                    '<span class="stat" style="border-left:3px solid #e05e00">' + data.needsImprovement + ' Needs Improvement</span>' +
+                    '<span class="stat" style="border-left:3px solid #c70000">' + data.fail + ' Fail</span>' +
+                    '<span class="stat">' + data.passRate + '% pass rate</span>' +
+                '</div>';
         }
     </script>
 </body>

@@ -166,6 +166,62 @@ Provide your analysis in the following JSON format (no other text):
 
 Include 2-4 consensus points, 2-4 contention points, and 3-5 notable comments."""
 
+ALT_TEXT_ASSESSMENT = """\
+You are an accessibility expert assessing image alt text quality for a Guardian news article.
+
+ARTICLE CONTEXT:
+- Headline: {article_headline}
+- Section: {article_section}
+- Image position: {position} in article
+- Is lead/hero image: {is_lead}
+
+ALT TEXT PROVIDED: "{alt_text}"
+CAPTION PROVIDED: "{caption}"
+ALT TEXT CHARACTER COUNT: {char_count}
+
+Assess the alt text against WCAG 2.1 accessibility standards and news photography best practice.
+
+CRITERIA TO CHECK:
+1. present: Alt text exists (not missing/None) unless image is purely decorative
+2. concise: Under 125 characters (current count provided above)
+3. descriptive: Describes what is visually meaningful — not just "image of X" or a vague label
+4. no_redundant_phrases: Does not start with "image of", "photo of", "picture of", "graphic of"
+5. not_caption_repeat: Provides different information from the caption (captions give context; alt text describes the image itself)
+6. news_context: For news photography, includes enough context (who, what, where) to be meaningful without seeing the image
+7. text_in_image: Any important text visible in the image is captured in the alt text
+8. no_keyword_stuffing: Not over-loaded with keywords for SEO purposes
+9. decorative_handled: If purely decorative (spacer, divider, abstract background), alt should be empty string
+
+First, determine if this image is purely decorative (yes/no).
+
+Then for each criterion, return: "pass", "fail", or "not_applicable".
+
+Return JSON only — no other text:
+{{
+  "is_decorative": false,
+  "score": "pass|needs_improvement|fail",
+  "issues": ["<specific problem 1>", "<specific problem 2>"],
+  "suggested_alt": "<improved alt text, max 125 chars>",
+  "violated_criteria": ["criterion_name_1"],
+  "criteria_results": {{
+    "present": "pass|fail",
+    "concise": "pass|fail|not_applicable",
+    "descriptive": "pass|fail",
+    "no_redundant_phrases": "pass|fail",
+    "not_caption_repeat": "pass|fail",
+    "news_context": "pass|fail",
+    "text_in_image": "pass|fail|not_applicable",
+    "no_keyword_stuffing": "pass|fail",
+    "decorative_handled": "pass|fail|not_applicable"
+  }}
+}}
+
+Score definitions:
+- pass: meets all applicable criteria
+- needs_improvement: minor issues; alt text is usable but could be better
+- fail: alt text is missing, empty on a non-decorative image, or significantly inadequate\
+"""
+
 COMMERCIAL_OPPORTUNITIES_AGGREGATED = """\
 Analyze reader comments from {article_count} Guardian articles about "{keyword}" to identify commercial and advertising opportunities.
 
