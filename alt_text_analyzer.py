@@ -12,6 +12,7 @@ import sys
 
 import requests
 from anthropic import Anthropic
+from llm_json import ask_json
 
 from prompts import ALT_TEXT_ASSESSMENT
 
@@ -113,36 +114,22 @@ def assess_alt_text(
 
     api_client = _get_client()
 
-    response = api_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1000,
-        messages=[
+    content = [
             {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": base64_image,
-                        },
-                    },
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ],
-    )
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64_image,
+                },
+            },
+            {"type": "text", "text": prompt},
+        ]
 
-    raw = response.content[0].text
     try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            result = json.loads(match.group())
-        else:
-            result = {
+        result = ask_json(api_client, content, max_tokens=2000, schema="alt_text")
+    except ValueError:
+        result = {
                 "score": "fail",
                 "issues": ["Could not parse Claude response"],
                 "suggested_alt": "",

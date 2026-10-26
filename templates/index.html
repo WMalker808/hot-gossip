@@ -318,6 +318,23 @@
 
         .hidden { display: none; }
 
+        /* Summary, themes, follow-ups */
+        .summary-text p { margin-bottom: 0.75rem; line-height: 1.55; }
+        .summary-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 0.75rem 0; }
+        .summary-columns h4, .summary-notable h4 { font-size: 0.95rem; color: #052962; margin-bottom: 0.4rem; }
+        .summary-columns ul { padding-left: 1.1rem; font-size: 0.9rem; }
+        .summary-columns li { margin-bottom: 0.3rem; }
+        .notable-item { border-left: 3px solid #052962; padding-left: 0.75rem; margin-bottom: 0.6rem; }
+        .notable-item blockquote { font-style: italic; font-size: 0.9rem; color: #333; }
+        .notable-item p { font-size: 0.8rem; color: #707070; margin-top: 0.2rem; }
+        .theme-item { padding: 0.75rem 0; border-bottom: 1px solid #dcdcdc; }
+        .theme-item:last-child { border-bottom: none; }
+        .theme-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+        .theme-header h4 { font-size: 1rem; margin: 0; }
+        .theme-description { font-size: 0.9rem; color: #333; }
+        .theme-quote { font-size: 0.85rem; color: #555; font-style: italic; margin-top: 0.3rem; }
+        .muted-note { color: #707070; }
+
         /* Brand cards */
         .brands-grid {
             display: grid;
@@ -659,6 +676,16 @@
                 <div id="articles-content" class="articles-list"></div>
             </div>
 
+            <div id="summary-card" class="result-card hidden">
+                <h2>Discussion Summary</h2>
+                <div id="summary-content"></div>
+            </div>
+
+            <div id="themes-card" class="result-card hidden">
+                <h2>Key Themes</h2>
+                <div id="themes-content"></div>
+            </div>
+
             <div id="questions-card" class="result-card hidden">
                 <h2>Discussion Questions</h2>
                 <p class="questions-intro">Three questions to promote constructive, diverse debate:</p>
@@ -670,6 +697,11 @@
                 <div id="sentiment-chart"></div>
                 <p id="sentiment-summary"></p>
                 <div id="sentiment-topics"></div>
+            </div>
+
+            <div id="followups-card" class="result-card hidden">
+                <h2>Follow-up Story Ideas</h2>
+                <div id="followups-content"></div>
             </div>
 
             <div id="commercial-card" class="result-card hidden">
@@ -771,11 +803,14 @@
             document.getElementById("sentiment-topics").innerHTML = "";
             document.getElementById("questions-content").innerHTML = "";
             document.getElementById("commercial-content").innerHTML = "";
+            document.getElementById("summary-content").innerHTML = "";
+            document.getElementById("themes-content").innerHTML = "";
+            document.getElementById("followups-content").innerHTML = "";
             document.getElementById("alttext-meta-content").innerHTML = "";
             document.getElementById("alttext-results-content").innerHTML = "";
             document.getElementById("alttext-summary-content").innerHTML = "";
             ["meta-card", "keyword-meta-card", "articles-card", "sentiment-card",
-             "questions-card", "commercial-card",
+             "questions-card", "commercial-card", "summary-card", "themes-card", "followups-card",
              "alttext-meta-card", "alttext-results-card", "alttext-summary-card"].forEach(function(id) {
                 hide(document.getElementById(id));
             });
@@ -900,9 +935,12 @@
         function handleProgress(data) {
             progressMessage.textContent = data.message;
             var msg = data.message.toLowerCase();
-            if (msg.includes("discussion"))       currentProgress = 30;
-            else if (msg.includes("sentiment"))   currentProgress = 55;
-            else if (msg.includes("commercial"))  currentProgress = 80;
+            if (msg.includes("summariz"))          currentProgress = 25;
+            else if (msg.includes("themes"))      currentProgress = 38;
+            else if (msg.includes("discussion questions")) currentProgress = 50;
+            else if (msg.includes("sentiment"))   currentProgress = 62;
+            else if (msg.includes("commercial"))  currentProgress = 75;
+            else if (msg.includes("follow-up"))   currentProgress = 88;
             else if (msg.includes("scraped"))     currentProgress = 15;
             else if (msg.includes("preparing"))   currentProgress = 20;
             else currentProgress = Math.min(currentProgress + 3, 15);
@@ -913,10 +951,95 @@
             show(resultsSection);
             switch (data.section) {
                 case "meta":         renderMeta(data.data);     break;
-                case "sentiment":    break;
+                case "sentiment":    renderSentiment(data.data); break;
                 case "discussionQuestions": renderDiscussionQuestions(data.data); break;
-                case "commercialOpportunities": break;
+                case "commercialOpportunities": renderCommercial(data.data); break;
+                case "summary":      renderSummary(data.data);   break;
+                case "themes":       renderThemes(data.data);    break;
+                case "followUpIdeas": renderFollowUps(data.data); break;
             }
+        }
+
+        function failedNote(what, data) {
+            var detail = data && data.error ? ": " + data.error : "";
+            return '<p class="muted-note">Couldn\'t generate ' + what + escapeHtml(detail) + '</p>';
+        }
+
+        function listItems(arr) {
+            return (arr || []).map(function(x) { return '<li>' + escapeHtml(x) + '</li>'; }).join("");
+        }
+
+        function renderSummary(data) {
+            show(document.getElementById("summary-card"));
+            var el = document.getElementById("summary-content");
+            if (!data || data.error) { el.innerHTML = failedNote("a summary", data); return; }
+
+            var paras = String(data.executiveSummary || "").split(/\n\s*\n/).filter(Boolean);
+            var html = '<div class="summary-text">' +
+                paras.map(function(p) { return '<p>' + escapeHtml(p) + '</p>'; }).join("") + '</div>';
+
+            var cons = data.consensus || [], cont = data.contention || [];
+            if (cons.length || cont.length) {
+                html += '<div class="summary-columns">' +
+                    (cons.length ? '<div><h4>Where readers agree</h4><ul>' + listItems(cons) + '</ul></div>' : '') +
+                    (cont.length ? '<div><h4>Where readers disagree</h4><ul>' + listItems(cont) + '</ul></div>' : '') +
+                '</div>';
+            }
+
+            var notable = data.notableComments || [];
+            if (notable.length) {
+                html += '<div class="summary-notable"><h4>Notable comments</h4>' +
+                    notable.map(function(n) {
+                        return '<div class="notable-item"><blockquote>"' + escapeHtml(n.excerpt || "") + '"</blockquote>' +
+                            (n.why ? '<p>' + escapeHtml(n.why) + '</p>' : '') + '</div>';
+                    }).join("") + '</div>';
+            }
+            el.innerHTML = html;
+        }
+
+        function renderThemes(themes) {
+            show(document.getElementById("themes-card"));
+            var el = document.getElementById("themes-content");
+            if (!themes || !themes.length) { el.innerHTML = '<p class="muted-note">No clear themes found.</p>'; return; }
+            if (themes[0] && themes[0].error) { el.innerHTML = failedNote("themes", themes[0]); return; }
+
+            el.innerHTML = themes.map(function(t) {
+                var sentiment = t.sentiment || "neutral";
+                var freq = t.frequency || "";
+                var quotes = (t.representativeQuotes || []).slice(0, 2);
+                return '<div class="theme-item">' +
+                    '<div class="theme-header"><h4>' + escapeHtml(t.name || "") + '</h4>' +
+                        (freq ? '<span class="badge badge-' + escapeHtml(freq) + '">' + escapeHtml(freq) + ' frequency</span>' : '') +
+                        '<span class="badge badge-' + escapeHtml(sentiment) + '">' + escapeHtml(sentiment) + '</span>' +
+                    '</div>' +
+                    '<p class="theme-description">' + escapeHtml(t.description || "") + '</p>' +
+                    quotes.map(function(q) { return '<p class="theme-quote">"' + escapeHtml(q) + '"</p>'; }).join("") +
+                '</div>';
+            }).join("");
+        }
+
+        function renderFollowUps(ideas) {
+            show(document.getElementById("followups-card"));
+            var el = document.getElementById("followups-content");
+            if (!ideas || !ideas.length) { el.innerHTML = '<p class="muted-note">No follow-up ideas found.</p>'; return; }
+            if (ideas[0] && ideas[0].error) { el.innerHTML = failedNote("follow-up ideas", ideas[0]); return; }
+
+            el.innerHTML = ideas.map(function(f, i) {
+                var level = f.interestLevel || "";
+                var sources = f.suggestedSources || [];
+                return '<div class="followup-item">' +
+                    '<div class="followup-header">' +
+                        '<span class="followup-rank">' + (i + 1) + '</span>' +
+                        '<h4>' + escapeHtml(f.headline || "") + '</h4>' +
+                        (level ? '<span class="badge badge-' + escapeHtml(level) + '">' + escapeHtml(level) + ' interest</span>' : '') +
+                    '</div>' +
+                    '<p class="followup-angle">' + escapeHtml(f.angle || "") + '</p>' +
+                    (f.evidence ? '<p class="followup-evidence"><strong>Evidence:</strong> ' + escapeHtml(f.evidence) + '</p>' : '') +
+                    (sources.length ? '<div class="suggested-sources">' +
+                        sources.map(function(s) { return '<span class="source-tag">' + escapeHtml(s) + '</span>'; }).join(" ") +
+                    '</div>' : '') +
+                '</div>';
+            }).join("");
         }
 
         function handleComplete() {
@@ -1073,6 +1196,10 @@
         function renderSentiment(data) {
             var card = document.getElementById("sentiment-card");
             show(card);
+            if (!data || data.error) {
+                document.getElementById("sentiment-chart").innerHTML = failedNote("sentiment analysis", data);
+                return;
+            }
 
             var overall = data.overall || {};
             var pos = overall.positive || 0;
@@ -1111,6 +1238,10 @@
         function renderDiscussionQuestions(questions) {
             var card = document.getElementById("questions-card");
             show(card);
+            if (questions && questions[0] && questions[0].error) {
+                document.getElementById("questions-content").innerHTML = failedNote("discussion questions", questions[0]);
+                return;
+            }
 
             document.getElementById("questions-content").innerHTML = questions.map(function(q) {
                 return '<div class="question-item">' +
@@ -1124,7 +1255,11 @@
             var card = document.getElementById("commercial-card");
             show(card);
 
-            if (!data || data.error) {
+            if (data && data.error) {
+                document.getElementById("commercial-content").innerHTML = failedNote("commercial opportunities", data);
+                return;
+            }
+            if (!data) {
                 document.getElementById("commercial-content").innerHTML =
                     '<p style="color:#707070;">No commercial signals found in comments.</p>';
                 return;

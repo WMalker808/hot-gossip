@@ -10,6 +10,8 @@ import json
 import re
 import sys
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True)  # .env wins over shell variables when running locally
 import time
 from datetime import datetime
 from html.parser import HTMLParser

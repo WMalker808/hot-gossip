@@ -7,9 +7,12 @@ Analyzes scraped comments using Claude API to extract insights.
 import json
 import sys
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True)  # .env wins over shell variables when running locally
 import re
 from datetime import datetime
 from anthropic import Anthropic
+from llm_json import ask_json
 from prompts import (
     SENTIMENT,
     FOLLOWUP_IDEAS,
@@ -85,22 +88,11 @@ def analyze_sentiment(comments_text: str, article_title: str) -> dict:
 
     prompt = SENTIMENT.format(article_title=article_title, comments_text=comments_text)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result
-    except json.JSONDecodeError:
-        # Try to extract JSON from response
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        return {"error": "Failed to parse sentiment analysis", "raw": text}
+        result = ask_json(client, prompt, max_tokens=3000, schema="sentiment")
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
 
 
 def extract_themes(comments_text: str, article_title: str) -> list:
@@ -109,21 +101,11 @@ def extract_themes(comments_text: str, article_title: str) -> list:
 
     prompt = THEMES.format(article_title=article_title, comments_text=comments_text)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result.get("themes", [])
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group()).get("themes", [])
-        return [{"error": "Failed to parse themes", "raw": text}]
+        result = ask_json(client, prompt, max_tokens=4000, schema="themes")
+    except ValueError as e:
+        return [{"error": str(e)}]
+    return result.get("themes", [])
 
 
 def generate_summary(comments_text: str, article_title: str, comment_count: int) -> dict:
@@ -132,21 +114,11 @@ def generate_summary(comments_text: str, article_title: str, comment_count: int)
 
     prompt = SUMMARY.format(article_title=article_title, comments_text=comments_text, comment_count=comment_count)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        return {"error": "Failed to parse summary", "raw": text}
+        result = ask_json(client, prompt, max_tokens=4000, schema="summary")
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
 
 
 def generate_followup_ideas(comments_text: str, article_title: str) -> list:
@@ -155,21 +127,11 @@ def generate_followup_ideas(comments_text: str, article_title: str) -> list:
 
     prompt = FOLLOWUP_IDEAS.format(article_title=article_title, comments_text=comments_text)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result.get("followUpIdeas", [])
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group()).get("followUpIdeas", [])
-        return [{"error": "Failed to parse follow-up ideas", "raw": text}]
+        result = ask_json(client, prompt, max_tokens=3000, schema="followups")
+    except ValueError as e:
+        return [{"error": str(e)}]
+    return result.get("followUpIdeas", [])
 
 
 def generate_discussion_questions(comments_text: str, article_title: str) -> list:
@@ -178,21 +140,11 @@ def generate_discussion_questions(comments_text: str, article_title: str) -> lis
 
     prompt = DISCUSSION_QUESTIONS.format(article_title=article_title, comments_text=comments_text)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result.get("questions", [])
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group()).get("questions", [])
-        return [{"error": "Failed to parse discussion questions", "raw": text}]
+        result = ask_json(client, prompt, max_tokens=3000, schema="questions")
+    except ValueError as e:
+        return [{"error": str(e)}]
+    return result.get("questions", [])
 
 
 def extract_commercial_opportunities(comments_text: str, article_title: str) -> dict:
@@ -201,21 +153,11 @@ def extract_commercial_opportunities(comments_text: str, article_title: str) -> 
 
     prompt = COMMERCIAL_OPPORTUNITIES.format(article_title=article_title, comments_text=comments_text)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        return {"error": "Failed to parse commercial opportunities", "raw": text}
+        result = ask_json(client, prompt, max_tokens=4000, schema="commercial")
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
 
 
 def extract_commercial_opportunities_aggregated(comments_text: str, keyword: str, article_count: int) -> dict:
@@ -228,21 +170,11 @@ def extract_commercial_opportunities_aggregated(comments_text: str, keyword: str
         comments_text=comments_text
     )
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=2500,
-        messages=[{"role": "user", "content": prompt}]
-    )
-
     try:
-        result = json.loads(response.content[0].text)
-        return result
-    except json.JSONDecodeError:
-        text = response.content[0].text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        return {"error": "Failed to parse commercial opportunities", "raw": text}
+        result = ask_json(client, prompt, max_tokens=5000, schema="commercial")
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
 
 
 def merge_commercial_results(results: list) -> dict:

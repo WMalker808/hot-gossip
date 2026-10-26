@@ -4,13 +4,11 @@ Guardian Comments Analyzer — Flask Web App
 Provides a web interface for scraping and analyzing Guardian article comments.
 """
 
-# Gevent monkey patching must happen before any other imports
-# This is required when running under gunicorn with gevent workers
-from gevent import monkey
-monkey.patch_all()
-
 import json
 import os
+
+from dotenv import load_dotenv
+load_dotenv(override=True)  # .env wins over shell variables when running locally
 
 from flask import Flask, Response, render_template, request
 
@@ -25,6 +23,9 @@ from guardian_scraper import (
 from comment_analyzer import (
     prepare_comments_for_analysis,
     analyze_sentiment,
+    extract_themes,
+    generate_summary,
+    generate_followup_ideas,
     generate_discussion_questions,
     extract_commercial_opportunities,
     extract_commercial_opportunities_aggregated,
@@ -87,7 +88,21 @@ def generate_analysis(article_url: str):
         yield format_sse({"type": "progress", "step": "preparing", "message": "Preparing comments for analysis..."})
         comments_text = prepare_comments_for_analysis(comments)
 
-        # Phase 3: Run four analyses sequentially
+        # Phase 3: Run analyses sequentially
+        yield format_sse({"type": "progress", "step": "analyzing", "message": "Summarizing the conversation..."})
+        try:
+            summary = generate_summary(comments_text, article_title, total)
+        except Exception as e:
+            summary = {"error": str(e)}
+        yield format_sse({"type": "result", "section": "summary", "data": summary})
+
+        yield format_sse({"type": "progress", "step": "analyzing", "message": "Identifying themes..."})
+        try:
+            themes = extract_themes(comments_text, article_title)
+        except Exception as e:
+            themes = [{"error": str(e)}]
+        yield format_sse({"type": "result", "section": "themes", "data": themes})
+
         yield format_sse({"type": "progress", "step": "analyzing", "message": "Generating discussion questions..."})
         questions = generate_discussion_questions(comments_text, article_title)
         yield format_sse({"type": "result", "section": "discussionQuestions", "data": questions})
@@ -102,6 +117,13 @@ def generate_analysis(article_url: str):
         except Exception:
             commercial = {"brands": [], "recommendations": [], "opportunities": []}
         yield format_sse({"type": "result", "section": "commercialOpportunities", "data": commercial})
+
+        yield format_sse({"type": "progress", "step": "analyzing", "message": "Finding follow-up story ideas..."})
+        try:
+            followups = generate_followup_ideas(comments_text, article_title)
+        except Exception as e:
+            followups = [{"error": str(e)}]
+        yield format_sse({"type": "result", "section": "followUpIdeas", "data": followups})
 
         yield format_sse({"type": "complete", "message": "Analysis complete"})
 
