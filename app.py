@@ -4,8 +4,18 @@ Guardian Comments Analyzer — Flask Web App
 Provides a web interface for scraping and analyzing Guardian article comments.
 """
 
-import json
 import os
+import sys
+
+# Under gunicorn's gevent worker (Render), patch the standard library before
+# anything else imports ssl/socket; patching later can cause RecursionError.
+# Skipped for local `python app.py` runs, which don't use gevent.
+if "gunicorn" in os.path.basename(sys.argv[0]):
+    from gevent import monkey
+    monkey.patch_all()
+
+import json
+import traceback
 
 from dotenv import load_dotenv
 load_dotenv(override=True)  # .env wins over shell variables when running locally
@@ -93,6 +103,7 @@ def generate_analysis(article_url: str):
         try:
             summary = generate_summary(comments_text, article_title, total)
         except Exception as e:
+            traceback.print_exc()
             summary = {"error": str(e)}
         yield format_sse({"type": "result", "section": "summary", "data": summary})
 
@@ -100,6 +111,7 @@ def generate_analysis(article_url: str):
         try:
             themes = extract_themes(comments_text, article_title)
         except Exception as e:
+            traceback.print_exc()
             themes = [{"error": str(e)}]
         yield format_sse({"type": "result", "section": "themes", "data": themes})
 
@@ -115,6 +127,7 @@ def generate_analysis(article_url: str):
         try:
             commercial = extract_commercial_opportunities(comments_text, article_title)
         except Exception:
+            traceback.print_exc()
             commercial = {"brands": [], "recommendations": [], "opportunities": []}
         yield format_sse({"type": "result", "section": "commercialOpportunities", "data": commercial})
 
@@ -122,6 +135,7 @@ def generate_analysis(article_url: str):
         try:
             followups = generate_followup_ideas(comments_text, article_title)
         except Exception as e:
+            traceback.print_exc()
             followups = [{"error": str(e)}]
         yield format_sse({"type": "result", "section": "followUpIdeas", "data": followups})
 
@@ -130,6 +144,7 @@ def generate_analysis(article_url: str):
     except ValueError as e:
         yield format_sse({"type": "error", "message": str(e)})
     except Exception as e:
+        traceback.print_exc()
         yield format_sse({"type": "error", "message": f"Error: {e}"})
 
 
@@ -236,6 +251,7 @@ def generate_keyword_analysis(keyword: str, limit: int):
                     })
 
             except Exception as e:
+                traceback.print_exc()
                 yield format_sse({
                     "type": "progress",
                     "step": "scraping",
@@ -304,6 +320,7 @@ def generate_keyword_analysis(keyword: str, limit: int):
     except ValueError as e:
         yield format_sse({"type": "error", "message": str(e)})
     except Exception as e:
+        traceback.print_exc()
         yield format_sse({"type": "error", "message": f"Error: {e}"})
 
 
@@ -397,6 +414,7 @@ def generate_section_analysis(section_url: str, limit: int):
                     })
 
             except Exception as e:
+                traceback.print_exc()
                 yield format_sse({
                     "type": "progress",
                     "step": "scraping",
@@ -465,6 +483,7 @@ def generate_section_analysis(section_url: str, limit: int):
     except ValueError as e:
         yield format_sse({"type": "error", "message": str(e)})
     except Exception as e:
+        traceback.print_exc()
         yield format_sse({"type": "error", "message": f"Error: {e}"})
 
 
@@ -597,6 +616,7 @@ def generate_alt_text_analysis(article_url: str):
     except ValueError as e:
         yield format_sse({"type": "error", "message": str(e)})
     except Exception as e:
+        traceback.print_exc()
         yield format_sse({"type": "error", "message": f"Error: {e}"})
 
 
