@@ -3,3 +3,4 @@ anthropic>=0.39.0
 flask>=3.0.0
 gunicorn>=21.2.0
 gevent>=23.0.0
+packaging
